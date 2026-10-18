@@ -168,3 +168,4 @@ document.addEventListener("keydown", function (e) {
 });
 
 updateDisplay();
+

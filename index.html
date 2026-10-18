@@ -3,9 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pomodoro Timer</title>
+    <title>Pomodoro Focus Timer</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    
+<body class="mode-work">
+    <div class="app">
+        <header>
+            <h1>Pomodoro Focus Timer</h1>
+            <p class="tagline">Stay focused, one session at a time.</p>
+        </header>
+
+        <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="work">Focus</button>
+            <button class="mode-tab" data-mode="short">Short Break</button>
+            <button class="mode-tab" data-mode="long">Long Break</button>
+        </div>
+
+        <div class="timer-circle">
+            <svg viewBox="0 0 200 200">
+                <circle class="timer-track" cx="100" cy="100" r="90"></circle>
+                <circle class="timer-progress" cx="100" cy="100" r="90"></circle>
+            </svg>
+            <div class="timer-display">
+                <div id="time">25:00</div>
+                <div id="mode-label">Focus</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" id="start-pause">Start</button>
+            <button class="btn-secondary" id="reset">Reset</button>
+            <button class="btn-secondary" id="skip">Skip</button>
+        </div>
+
+        <div class="session-info">
+            Sessions completed: <span id="session-count">0</span><br>
+            Total focus time: <span id="total-focus">0m</span>
+        </div>
+
+        <div class="settings">
+            <h2>Settings</h2>
+            <div class="setting-row">
+                <label for="work-duration">Focus (minutes)</label>
+                <input type="number" id="work-duration" min="1" max="120" value="25">
+            </div>
+            <div class="setting-row">
+                <label for="short-duration">Short break (minutes)</label>
+                <input type="number" id="short-duration" min="1" max="60" value="5">
+            </div>
+            <div class="setting-row">
+                <label for="long-duration">Long break (minutes)</label>
+                <input type="number" id="long-duration" min="1" max="60" value="15">
+            </div>
+            <div class="setting-row">
+                <label for="sound-toggle">Sound</label>
+                <input type="checkbox" id="sound-toggle" checked>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
 </body>
 </html>

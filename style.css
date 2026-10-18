@@ -1,0 +1,248 @@
+:root {
+    --bg-dark: #1a1a2e;
+    --bg-card: #16213e;
+    --accent: #e94560;
+    --accent-soft: #ff6b6b;
+    --text: #eee;
+    --text-muted: #aab;
+    --work-color: #e94560;
+    --short-color: #4ecca3;
+    --long-color: #3d84ff;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(135deg, var(--bg-dark), #0f3460);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+}
+
+.app {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+}
+
+header h1 {
+    font-size: 1.8rem;
+    margin-bottom: 0.25rem;
+}
+
+.tagline {
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+}
+
+.mode-tabs {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.mode-tab {
+    background: var(--bg-card);
+    color: var(--text-muted);
+    border: 2px solid transparent;
+    padding: 0.5rem 1.2rem;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.mode-tab:hover {
+    color: var(--text);
+}
+
+.mode-tab.active[data-mode="work"] {
+    border-color: var(--work-color);
+    color: var(--work-color);
+}
+
+.mode-tab.active[data-mode="short"] {
+    border-color: var(--short-color);
+    color: var(--short-color);
+}
+
+.mode-tab.active[data-mode="long"] {
+    border-color: var(--long-color);
+    color: var(--long-color);
+}
+
+.timer-circle {
+    position: relative;
+    width: 260px;
+    height: 260px;
+    margin: 0 auto 2rem;
+}
+
+.timer-circle svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.timer-track {
+    fill: none;
+    stroke: var(--bg-card);
+    stroke-width: 8;
+}
+
+.timer-progress {
+    fill: none;
+    stroke: var(--work-color);
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 565.48;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1s linear, stroke 0.3s;
+}
+
+.timer-display {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#time {
+    font-size: 3.5rem;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+}
+
+#mode-label {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+}
+
+.controls {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 0.85rem 2.5rem;
+    font-size: 1.1rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.2s;
+}
+
+.btn-primary:hover {
+    background: var(--accent-soft);
+}
+
+.btn-primary:active {
+    transform: scale(0.96);
+}
+
+.btn-secondary {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid #2a3a5e;
+    padding: 0.85rem 1.5rem;
+    font-size: 1rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-secondary:hover {
+    background: #1e2d50;
+}
+
+.session-info {
+    margin-bottom: 2rem;
+    color: var(--text-muted);
+    line-height: 1.8;
+}
+
+.session-info span {
+    color: var(--text);
+    font-weight: bold;
+}
+
+.settings {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: left;
+}
+
+.settings h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+}
+
+.setting-row label {
+    color: var(--text-muted);
+}
+
+.setting-row input[type="number"] {
+    width: 70px;
+    background: var(--bg-dark);
+    color: var(--text);
+    border: 1px solid #2a3a5e;
+    border-radius: 8px;
+    padding: 0.4rem 0.6rem;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.setting-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--accent);
+}
+
+body.mode-short .timer-progress {
+    stroke: var(--short-color);
+}
+
+body.mode-long .timer-progress {
+    stroke: var(--long-color);
+}
+
+@media (max-width: 400px) {
+    .timer-circle {
+        width: 220px;
+        height: 220px;
+    }
+
+    #time {
+        font-size: 2.8rem;
+    }
+
+    .controls {
+        flex-wrap: wrap;
+    }
+  }

@@ -394,6 +394,58 @@ body.mode-long .timer-progress {
     background: rgba(233, 69, 96, 0.12);
 }
 
+.history {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+
+.link-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.link-button:hover {
+    color: var(--text);
+}
+
+.history-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.history-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.9rem;
+    padding: 0.3rem 0.1rem;
+    border-bottom: 1px solid var(--divider);
+}
+
+.history-row:last-child {
+    border-bottom: none;
+}
+
+.history-when {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.history-empty {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 @media (max-width: 400px) {
     .timer-circle {
         width: 220px;

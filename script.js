@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
     long: 15,
     sound: true,
     notify: false,
+    ambient: false,
     sessionsBeforeLong: 4
 };
 
@@ -28,6 +29,7 @@ const state = {
     totalFocusMs: 0,
     workSessionsInRow: 0,
     tasks: [],
+    history: [],
     lastTickAt: 0,
     ticker: null
 };
@@ -43,11 +45,14 @@ const els = {
     totalFocus: document.getElementById("total-focus"),
     soundToggle: document.getElementById("sound-toggle"),
     notifyToggle: document.getElementById("notify-toggle"),
+    ambientToggle: document.getElementById("ambient-toggle"),
     themeToggle: document.getElementById("theme-toggle"),
     taskForm: document.getElementById("task-form"),
     taskInput: document.getElementById("task-input"),
     taskList: document.getElementById("task-list"),
     tasksProgress: document.getElementById("tasks-progress"),
+    historyList: document.getElementById("history-list"),
+    historyClear: document.getElementById("history-clear"),
     tabs: document.querySelectorAll(".mode-tab"),
     inputs: {
         work: document.getElementById("work-duration"),
@@ -80,7 +85,13 @@ function loadTheme() {
 function applyTheme(theme) {
     const isLight = theme === "light";
     document.body.classList.toggle("theme-light", isLight);
-    if (els.themeToggle) {
+els.historyClear.addEventListener("click", function () {
+    state.history = [];
+    renderHistory();
+    queueSave();
+});
+
+if (els.themeToggle) {
         els.themeToggle.textContent = isLight ? "Dark" : "Light";
         els.themeToggle.setAttribute("aria-label", isLight ? "Switch to dark theme" : "Switch to light theme");
     }
@@ -112,6 +123,7 @@ function saveState() {
                 workSessionsInRow: state.workSessionsInRow
             },
             tasks: state.tasks,
+            history: state.history.slice(0, 20),
             timer: {
                 mode: state.mode,
                 remainingMs: state.remainingMs,
@@ -146,6 +158,7 @@ function loadState() {
         state.settings.long = clampMinutes(saved.settings.long, 1, 60, DEFAULT_SETTINGS.long);
         state.settings.sound = saved.settings.sound !== false;
         state.settings.notify = saved.settings.notify === true;
+        state.settings.ambient = saved.settings.ambient === true;
     }
 
     if (saved.stats) {
@@ -166,6 +179,17 @@ function loadState() {
                     text: task.text.trim().slice(0, 120),
                     done: task.done === true
                 };
+            });
+    }
+
+    if (Array.isArray(saved.history)) {
+        state.history = saved.history
+            .filter(function (entry) {
+                return entry && Number.isFinite(Number(entry.at)) && Number(entry.minutes) > 0;
+            })
+            .slice(0, 20)
+            .map(function (entry) {
+                return { at: Number(entry.at), minutes: Math.round(Number(entry.minutes)) };
             });
     }
 
@@ -277,6 +301,54 @@ function renderTasks() {
     queueSave();
 }
 
+function formatWhen(timestamp) {
+    const when = new Date(timestamp);
+    const today = new Date();
+    const time = when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+    if (when.toDateString() === today.toDateString()) {
+        return time;
+    }
+
+    return when.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + time;
+}
+
+function recordSession(focusedMinutes) {
+    if (state.mode !== "work") return;
+    const minutes = Math.round(Number(focusedMinutes) || 0);
+    if (minutes < 1) return;
+    state.history.unshift({ at: Date.now(), minutes: minutes });
+    state.history = state.history.slice(0, 20);
+}
+
+function renderHistory() {
+    els.historyList.textContent = "";
+
+    if (state.history.length === 0) {
+        const empty = document.createElement("li");
+        empty.className = "history-empty";
+        empty.textContent = "Finished focus sessions will show up here.";
+        els.historyList.appendChild(empty);
+        return;
+    }
+
+    state.history.forEach(function (entry) {
+        const row = document.createElement("li");
+        row.className = "history-row";
+
+        const label = document.createElement("span");
+        label.textContent = "Focus \u00b7 " + entry.minutes + " min";
+
+        const when = document.createElement("span");
+        when.className = "history-when";
+        when.textContent = formatWhen(entry.at);
+
+        row.appendChild(label);
+        row.appendChild(when);
+        els.historyList.appendChild(row);
+    });
+}
+
 function render() {
     els.time.textContent = formatClock(state.remainingMs);
     els.modeLabel.textContent = MODES[state.mode].label;
@@ -342,6 +414,7 @@ function startTimer() {
     state.endsAt = Date.now() + state.remainingMs;
     state.running = true;
     startTicker();
+    startAmbient();
     render();
 }
 
@@ -356,6 +429,7 @@ function pauseTimer() {
     state.endsAt = null;
     state.running = false;
     stopTicker();
+    stopAmbient();
     render();
 }
 
@@ -369,6 +443,7 @@ function toggleTimer() {
 
 function resetTimer() {
     stopTicker();
+    stopAmbient();
     state.running = false;
     state.endsAt = null;
     state.remainingMs = modeDurationMs(state.mode);
@@ -378,6 +453,7 @@ function resetTimer() {
 function setMode(mode) {
     if (!MODES[mode]) return;
     stopTicker();
+    stopAmbient();
     state.mode = mode;
     state.running = false;
     state.endsAt = null;
@@ -394,8 +470,9 @@ function nextMode() {
     return "work";
 }
 
-function completeSession() {
+function completeSession(focusedMinutes) {
     stopTicker();
+    stopAmbient();
     state.running = false;
     state.endsAt = null;
     state.remainingMs = 0;
@@ -405,6 +482,7 @@ function completeSession() {
     if (wasWork) {
         state.sessionsCompleted += 1;
         state.workSessionsInRow += 1;
+        recordSession(focusedMinutes === undefined ? state.settings.work : focusedMinutes);
     }
 
     playChime();
@@ -418,15 +496,78 @@ function completeSession() {
 }
 
 function skipSession() {
-    if (state.mode === "work") {
-        const elapsed = Math.max(0, modeDurationMs(state.mode) - state.remainingMs);
+    const wasWork = state.mode === "work";
+    const elapsed = wasWork ? Math.max(0, modeDurationMs(state.mode) - state.remainingMs) : 0;
+
+    if (wasWork) {
         state.totalFocusMs += elapsed;
     }
+
     stopTicker();
     state.running = false;
     state.endsAt = null;
     state.remainingMs = 0;
-    completeSession();
+    completeSession(elapsed / 60000);
+}
+
+let ambient = null;
+
+function startAmbient() {
+    if (!state.settings.ambient || ambient) return;
+
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+
+    try {
+        const ctx = new AudioCtor();
+        const seconds = 2;
+        const frames = Math.floor(ctx.sampleRate * seconds);
+        const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let last = 0;
+
+        for (let i = 0; i < frames; i += 1) {
+            const white = Math.random() * 2 - 1;
+            last = (last + 0.02 * white) / 1.02;
+            data[i] = last * 3.5;
+        }
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = 900;
+
+        const gain = ctx.createGain();
+        gain.gain.value = 0.16;
+
+        source.connect(filter).connect(gain).connect(ctx.destination);
+        source.start();
+
+        ambient = { ctx: ctx, source: source };
+    } catch (error) {
+        console.warn("Background noise unavailable:", error);
+    }
+}
+
+function stopAmbient() {
+    if (!ambient) return;
+
+    try {
+        ambient.source.stop();
+    } catch (error) {
+        console.warn("Could not stop background noise:", error);
+    }
+
+    try {
+        if (typeof ambient.ctx.close === "function") ambient.ctx.close();
+    } catch (error) {
+        console.warn("Could not close audio context:", error);
+    }
+
+    ambient = null;
 }
 
 function playChime() {
@@ -539,6 +680,16 @@ els.notifyToggle.addEventListener("change", function () {
     });
 });
 
+els.ambientToggle.addEventListener("change", function () {
+    state.settings.ambient = els.ambientToggle.checked;
+    if (state.settings.ambient && state.running) {
+        startAmbient();
+    } else {
+        stopAmbient();
+    }
+    queueSave();
+});
+
 els.taskForm.addEventListener("submit", function (event) {
     event.preventDefault();
     addTask(els.taskInput.value);
@@ -572,7 +723,10 @@ document.addEventListener("visibilitychange", function () {
     }
 });
 
-window.addEventListener("beforeunload", saveState);
+window.addEventListener("beforeunload", function () {
+    stopAmbient();
+    saveState();
+});
 
 document.addEventListener("keydown", function (event) {
     if (event.target instanceof HTMLInputElement) return;
@@ -593,6 +747,7 @@ els.inputs.work.value = String(state.settings.work);
 els.inputs.short.value = String(state.settings.short);
 els.inputs.long.value = String(state.settings.long);
 els.soundToggle.checked = state.settings.sound;
+els.ambientToggle.checked = state.settings.ambient;
 els.notifyToggle.checked = state.settings.notify
     && typeof Notification !== "undefined"
     && Notification.permission === "granted";
@@ -603,3 +758,4 @@ if (state.running) {
 
 render();
 renderTasks();
+renderHistory();

@@ -1,171 +1,303 @@
-const DURATIONS = {
-    work: 25 * 60,
-    short: 5 * 60,
-    long: 15 * 60
+"use strict";
+
+const MODES = {
+    work: { label: "Focus" },
+    short: { label: "Short Break" },
+    long: { label: "Long Break" }
 };
 
-const MODE_LABELS = {
-    work: "Focus",
-    short: "Short Break",
-    long: "Long Break"
+const DEFAULT_SETTINGS = {
+    work: 25,
+    short: 5,
+    long: 15,
+    sound: true,
+    sessionsBeforeLong: 4
 };
 
 const CIRCUMFERENCE = 2 * Math.PI * 90;
+const TICK_MS = 250;
 
-let currentMode = "work";
-let timeRemaining = DURATIONS.work;
-let isRunning = false;
-let intervalId = null;
-let sessionsCompleted = 0;
-let totalFocusSeconds = 0;
-let workSessionsBeforeLong = 0;
+const state = {
+    mode: "work",
+    settings: Object.assign({}, DEFAULT_SETTINGS),
+    remainingMs: DEFAULT_SETTINGS.work * 60 * 1000,
+    endsAt: null,
+    running: false,
+    sessionsCompleted: 0,
+    totalFocusMs: 0,
+    workSessionsInRow: 0,
+    lastTickAt: 0,
+    ticker: null
+};
 
-const timeDisplay = document.getElementById("time");
-const modeLabel = document.getElementById("mode-label");
-const progressCircle = document.querySelector(".timer-progress");
-const startPauseBtn = document.getElementById("start-pause");
-const resetBtn = document.getElementById("reset");
-const skipBtn = document.getElementById("skip");
-const sessionCountEl = document.getElementById("session-count");
-const totalFocusEl = document.getElementById("total-focus");
-const soundToggle = document.getElementById("sound-toggle");
-const modeTabs = document.querySelectorAll(".mode-tab");
-const workInput = document.getElementById("work-duration");
-const shortInput = document.getElementById("short-duration");
-const longInput = document.getElementById("long-duration");
+const els = {
+    time: document.getElementById("time"),
+    modeLabel: document.getElementById("mode-label"),
+    progress: document.querySelector(".timer-progress"),
+    startPause: document.getElementById("start-pause"),
+    reset: document.getElementById("reset"),
+    skip: document.getElementById("skip"),
+    sessionCount: document.getElementById("session-count"),
+    totalFocus: document.getElementById("total-focus"),
+    soundToggle: document.getElementById("sound-toggle"),
+    tabs: document.querySelectorAll(".mode-tab"),
+    inputs: {
+        work: document.getElementById("work-duration"),
+        short: document.getElementById("short-duration"),
+        long: document.getElementById("long-duration")
+    }
+};
 
-progressCircle.style.strokeDasharray = CIRCUMFERENCE;
-progressCircle.style.strokeDashoffset = 0;
-
-function formatTime(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+function modeDurationMs(mode) {
+    return state.settings[mode] * 60 * 1000;
 }
 
-function updateDisplay() {
-    timeDisplay.textContent = formatTime(timeRemaining);
-    const total = DURATIONS[currentMode];
-    const elapsed = total - timeRemaining;
-    progressCircle.style.strokeDashoffset = (elapsed / total) * CIRCUMFERENCE;
+function formatClock(ms) {
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const mm = String(minutes).padStart(2, "0");
+    const ss = String(seconds).padStart(2, "0");
+    return hours > 0 ? hours + ":" + mm + ":" + ss : mm + ":" + ss;
 }
 
-function playChime() {
-    if (!soundToggle.checked) return;
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 800;
-        osc.type = "sine";
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 1);
-    } catch (e) {
-        console.warn("Audio not available:", e);
+function formatTotal(ms) {
+    const minutes = Math.floor(ms / 60000);
+    const hours = Math.floor(minutes / 60);
+    return hours > 0 ? hours + "h " + (minutes % 60) + "m" : minutes + "m";
+}
+
+function render() {
+    els.time.textContent = formatClock(state.remainingMs);
+    els.modeLabel.textContent = MODES[state.mode].label;
+    els.startPause.textContent = state.running ? "Pause" : "Start";
+
+    const total = modeDurationMs(state.mode);
+    const elapsed = total - state.remainingMs;
+    const ratio = total > 0 ? Math.min(1, Math.max(0, elapsed / total)) : 0;
+    els.progress.style.strokeDashoffset = (ratio * CIRCUMFERENCE).toFixed(2);
+
+    els.sessionCount.textContent = String(state.sessionsCompleted);
+    els.totalFocus.textContent = formatTotal(state.totalFocusMs);
+
+    document.title = state.running
+        ? formatClock(state.remainingMs) + " · " + MODES[state.mode].label
+        : "Pomodoro Focus Timer";
+
+    document.body.classList.remove("mode-work", "mode-short", "mode-long");
+    document.body.classList.add("mode-" + state.mode);
+
+    els.tabs.forEach(function (tab) {
+        tab.classList.toggle("active", tab.dataset.mode === state.mode);
+    });
+}
+
+function stopTicker() {
+    if (state.ticker !== null) {
+        clearInterval(state.ticker);
+        state.ticker = null;
     }
 }
 
-function setMode(mode, autoStart) {
-    currentMode = mode;
-    timeRemaining = DURATIONS[mode];
-    stopTimer();
-    modeLabel.textContent = MODE_LABELS[mode];
-    document.body.classList.remove("mode-work", "mode-short", "mode-long");
-    document.body.classList.add("mode-" + mode);
-    modeTabs.forEach(function (tab) {
-        tab.classList.toggle("active", tab.dataset.mode === mode);
-    });
-    updateDisplay();
-    if (autoStart) startTimer();
+function startTicker() {
+    stopTicker();
+    state.lastTickAt = Date.now();
+    state.ticker = setInterval(tick, TICK_MS);
+}
+
+function tick() {
+    if (!state.running) return;
+
+    const now = Date.now();
+    if (state.mode === "work") {
+        state.totalFocusMs += Math.max(0, now - state.lastTickAt);
+    }
+    state.lastTickAt = now;
+    state.remainingMs = Math.max(0, state.endsAt - now);
+
+    if (state.remainingMs <= 0) {
+        completeSession();
+        return;
+    }
+
+    render();
 }
 
 function startTimer() {
-    if (isRunning) return;
-    isRunning = true;
-    startPauseBtn.textContent = "Pause";
-    intervalId = setInterval(function () {
-        timeRemaining--;
-        if (currentMode === "work") totalFocusSeconds++;
-        updateDisplay();
-        if (timeRemaining <= 0) {
-            onTimerEnd();
-        }
-    }, 1000);
+    if (state.running) return;
+    if (state.remainingMs <= 0) state.remainingMs = modeDurationMs(state.mode);
+
+    state.endsAt = Date.now() + state.remainingMs;
+    state.running = true;
+    startTicker();
+    render();
 }
 
-function stopTimer() {
-    isRunning = false;
-    startPauseBtn.textContent = "Start";
-    if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
+function pauseTimer() {
+    if (!state.running) return;
+
+    const now = Date.now();
+    if (state.mode === "work") {
+        state.totalFocusMs += Math.max(0, now - state.lastTickAt);
     }
+    state.remainingMs = Math.max(0, state.endsAt - now);
+    state.endsAt = null;
+    state.running = false;
+    stopTicker();
+    render();
 }
 
-function onTimerEnd() {
-    stopTimer();
-    playChime();
-    if (currentMode === "work") {
-        sessionsCompleted++;
-        workSessionsBeforeLong++;
-        sessionCountEl.textContent = sessionsCompleted;
-        totalFocusEl.textContent = Math.floor(totalFocusSeconds / 60) + "m";
-        if (workSessionsBeforeLong % 4 === 0) {
-            setMode("long", true);
-        } else {
-            setMode("short", true);
-        }
-    } else {
-        setMode("work", true);
-    }
-}
-
-startPauseBtn.addEventListener("click", function () {
-    if (isRunning) {
-        stopTimer();
+function toggleTimer() {
+    if (state.running) {
+        pauseTimer();
     } else {
         startTimer();
     }
-});
+}
 
-resetBtn.addEventListener("click", function () {
-    setMode(currentMode, false);
-});
+function resetTimer() {
+    stopTicker();
+    state.running = false;
+    state.endsAt = null;
+    state.remainingMs = modeDurationMs(state.mode);
+    render();
+}
 
-skipBtn.addEventListener("click", function () {
-    onTimerEnd();
-});
+function setMode(mode) {
+    if (!MODES[mode]) return;
+    stopTicker();
+    state.mode = mode;
+    state.running = false;
+    state.endsAt = null;
+    state.remainingMs = modeDurationMs(mode);
+    render();
+}
 
-modeTabs.forEach(function (tab) {
-    tab.addEventListener("click", function () {
-        setMode(tab.dataset.mode, false);
-    });
-});
+function nextMode() {
+    if (state.mode === "work") {
+        return state.workSessionsInRow > 0 && state.workSessionsInRow % state.settings.sessionsBeforeLong === 0
+            ? "long"
+            : "short";
+    }
+    return "work";
+}
 
-function applySettings() {
-    DURATIONS.work = parseInt(workInput.value, 10) * 60 || 25 * 60;
-    DURATIONS.short = parseInt(shortInput.value, 10) * 60 || 5 * 60;
-    DURATIONS.long = parseInt(longInput.value, 10) * 60 || 15 * 60;
-    if (!isRunning) {
-        timeRemaining = DURATIONS[currentMode];
-        updateDisplay();
+function completeSession() {
+    stopTicker();
+    state.running = false;
+    state.endsAt = null;
+    state.remainingMs = 0;
+
+    if (state.mode === "work") {
+        state.sessionsCompleted += 1;
+        state.workSessionsInRow += 1;
+    }
+
+    playChime();
+    render();
+
+    const upcoming = nextMode();
+    window.setTimeout(function () {
+        setMode(upcoming);
+    }, 800);
+}
+
+function skipSession() {
+    if (state.mode === "work") {
+        const elapsed = Math.max(0, modeDurationMs(state.mode) - state.remainingMs);
+        state.totalFocusMs += elapsed;
+    }
+    stopTicker();
+    state.running = false;
+    state.endsAt = null;
+    state.remainingMs = 0;
+    completeSession();
+}
+
+function playChime() {
+    if (!els.soundToggle.checked) return;
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+
+    try {
+        const ctx = new AudioCtor();
+        const now = ctx.currentTime;
+        [660, 880].forEach(function (frequency, index) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.0001, now + index * 0.18);
+            gain.gain.exponentialRampToValueAtTime(0.25, now + index * 0.18 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.18 + 0.9);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(now + index * 0.18);
+            osc.stop(now + index * 0.18 + 1);
+        });
+        window.setTimeout(function () {
+            if (typeof ctx.close === "function") ctx.close();
+        }, 1600);
+    } catch (error) {
+        console.warn("Audio unavailable:", error);
     }
 }
 
-[workInput, shortInput, longInput].forEach(function (input) {
-    input.addEventListener("change", applySettings);
+function applySettings() {
+    const next = {
+        work: clampMinutes(els.inputs.work.value, 1, 120, DEFAULT_SETTINGS.work),
+        short: clampMinutes(els.inputs.short.value, 1, 60, DEFAULT_SETTINGS.short),
+        long: clampMinutes(els.inputs.long.value, 1, 60, DEFAULT_SETTINGS.long)
+    };
+
+    const wasRunning = state.running;
+    state.settings.work = next.work;
+    state.settings.short = next.short;
+    state.settings.long = next.long;
+
+    if (!wasRunning) {
+        state.remainingMs = modeDurationMs(state.mode);
+    }
+    render();
+}
+
+function clampMinutes(value, min, max, fallback) {
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+}
+
+els.startPause.addEventListener("click", toggleTimer);
+els.reset.addEventListener("click", resetTimer);
+els.skip.addEventListener("click", skipSession);
+
+els.tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+        setMode(tab.dataset.mode);
+    });
 });
 
-document.addEventListener("keydown", function (e) {
-    if (e.code === "Space" && e.target.tagName !== "INPUT") {
-        e.preventDefault();
-        startPauseBtn.click();
+Object.keys(els.inputs).forEach(function (mode) {
+    els.inputs[mode].addEventListener("change", applySettings);
+});
+
+document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && state.running) {
+        tick();
     }
 });
 
-updateDisplay();
+document.addEventListener("keydown", function (event) {
+    if (event.target instanceof HTMLInputElement) return;
 
+    if (event.code === "Space") {
+        event.preventDefault();
+        toggleTimer();
+    } else if (event.key === "r" || event.key === "R") {
+        resetTimer();
+    } else if (event.key === "s" || event.key === "S") {
+        skipSession();
+    }
+});
+
+render();

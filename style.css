@@ -1,13 +1,33 @@
 :root {
     --bg-dark: #1a1a2e;
     --bg-card: #16213e;
+    --bg-grad-end: #0f3460;
     --accent: #e94560;
     --accent-soft: #ff6b6b;
     --text: #eee;
     --text-muted: #aab;
+    --line: #2a3a5e;
+    --hover: #1e2d50;
+    --divider: rgba(255, 255, 255, 0.06);
     --work-color: #e94560;
     --short-color: #4ecca3;
     --long-color: #3d84ff;
+}
+
+body.theme-light {
+    --bg-dark: #f1f4fa;
+    --bg-card: #ffffff;
+    --bg-grad-end: #dfe7f5;
+    --accent: #d4374f;
+    --accent-soft: #e4576d;
+    --text: #182135;
+    --text-muted: #5e6b84;
+    --line: #d6dfed;
+    --hover: #eaf0f9;
+    --divider: rgba(20, 35, 60, 0.09);
+    --work-color: #d4374f;
+    --short-color: #1e9c78;
+    --long-color: #2f6fe0;
 }
 
 * {
@@ -18,7 +38,7 @@
 
 body {
     font-family: "Segoe UI", system-ui, sans-serif;
-    background: linear-gradient(135deg, var(--bg-dark), #0f3460);
+    background: linear-gradient(135deg, var(--bg-dark), var(--bg-grad-end));
     color: var(--text);
     min-height: 100vh;
     display: flex;
@@ -32,9 +52,34 @@ body {
     text-align: center;
 }
 
+header {
+    position: relative;
+    padding-right: 4rem;
+    padding-left: 4rem;
+}
+
 header h1 {
     font-size: 1.8rem;
     margin-bottom: 0.25rem;
+}
+
+.theme-toggle {
+    position: absolute;
+    top: 0.2rem;
+    right: 0;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+}
+
+.theme-toggle:hover {
+    color: var(--text);
+    background: var(--hover);
 }
 
 .tagline {
@@ -160,7 +205,7 @@ header h1 {
 .btn-secondary {
     background: var(--bg-card);
     color: var(--text);
-    border: 1px solid #2a3a5e;
+    border: 1px solid var(--line);
     padding: 0.85rem 1.5rem;
     font-size: 1rem;
     border-radius: 999px;
@@ -169,7 +214,7 @@ header h1 {
 }
 
 .btn-secondary:hover {
-    background: #1e2d50;
+    background: var(--hover);
 }
 
 .session-info {
@@ -211,7 +256,7 @@ header h1 {
     width: 70px;
     background: var(--bg-dark);
     color: var(--text);
-    border: 1px solid #2a3a5e;
+    border: 1px solid var(--line);
     border-radius: 8px;
     padding: 0.4rem 0.6rem;
     font-size: 1rem;
@@ -267,7 +312,7 @@ body.mode-long .timer-progress {
     min-width: 0;
     background: var(--bg-dark);
     color: var(--text);
-    border: 1px solid #2a3a5e;
+    border: 1px solid var(--line);
     border-radius: 999px;
     padding: 0.6rem 1rem;
     font-size: 0.95rem;
@@ -281,7 +326,7 @@ body.mode-long .timer-progress {
 .task-form button {
     background: var(--bg-dark);
     color: var(--text);
-    border: 1px solid #2a3a5e;
+    border: 1px solid var(--line);
     border-radius: 999px;
     padding: 0 1.1rem;
     cursor: pointer;
@@ -290,7 +335,7 @@ body.mode-long .timer-progress {
 }
 
 .task-form button:hover {
-    background: #1e2d50;
+    background: var(--hover);
 }
 
 .task-list {
@@ -305,7 +350,7 @@ body.mode-long .timer-progress {
     align-items: center;
     gap: 0.65rem;
     padding: 0.5rem 0.25rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--divider);
 }
 
 .task-item:last-child {

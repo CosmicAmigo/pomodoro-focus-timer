@@ -41,6 +41,7 @@ const els = {
     sessionCount: document.getElementById("session-count"),
     totalFocus: document.getElementById("total-focus"),
     soundToggle: document.getElementById("sound-toggle"),
+    themeToggle: document.getElementById("theme-toggle"),
     taskForm: document.getElementById("task-form"),
     taskInput: document.getElementById("task-input"),
     taskList: document.getElementById("task-list"),
@@ -54,7 +55,45 @@ const els = {
 };
 
 const STORAGE_KEY = "pomodoro-focus-timer/v1";
+const THEME_KEY = "pomodoro-focus-timer/theme";
+const THEME_QUERY = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 let saveHandle = null;
+
+function loadTheme() {
+    let theme = null;
+
+    try {
+        theme = localStorage.getItem(THEME_KEY);
+    } catch (error) {
+        console.warn("Could not read theme:", error);
+    }
+
+    if (theme !== "light" && theme !== "dark") {
+        theme = THEME_QUERY && THEME_QUERY.matches ? "dark" : "light";
+    }
+
+    applyTheme(theme);
+}
+
+function applyTheme(theme) {
+    const isLight = theme === "light";
+    document.body.classList.toggle("theme-light", isLight);
+    if (els.themeToggle) {
+        els.themeToggle.textContent = isLight ? "Dark" : "Light";
+        els.themeToggle.setAttribute("aria-label", isLight ? "Switch to dark theme" : "Switch to light theme");
+    }
+}
+
+function toggleTheme() {
+    const isLight = document.body.classList.contains("theme-light");
+    const next = isLight ? "dark" : "light";
+    applyTheme(next);
+    try {
+        localStorage.setItem(THEME_KEY, next);
+    } catch (error) {
+        console.warn("Could not save theme:", error);
+    }
+}
 
 function saveState() {
     if (saveHandle !== null) {
@@ -471,6 +510,12 @@ els.taskList.addEventListener("click", function (event) {
         removeTask(item.dataset.id);
     }
 });
+
+if (els.themeToggle) {
+    els.themeToggle.addEventListener("click", toggleTheme);
+}
+
+loadTheme();
 
 document.addEventListener("visibilitychange", function () {
     if (document.hidden) {

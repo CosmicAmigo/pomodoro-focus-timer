@@ -48,6 +48,86 @@ const els = {
     }
 };
 
+const STORAGE_KEY = "pomodoro-focus-timer/v1";
+let saveHandle = null;
+
+function saveState() {
+    if (saveHandle !== null) {
+        clearTimeout(saveHandle);
+        saveHandle = null;
+    }
+
+    try {
+        const payload = {
+            settings: state.settings,
+            stats: {
+                sessionsCompleted: state.sessionsCompleted,
+                totalFocusMs: state.totalFocusMs,
+                workSessionsInRow: state.workSessionsInRow
+            },
+            timer: {
+                mode: state.mode,
+                remainingMs: state.remainingMs,
+                endsAt: state.running ? state.endsAt : null
+            }
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+        console.warn("Could not save state:", error);
+    }
+}
+
+function queueSave() {
+    if (saveHandle !== null) return;
+    saveHandle = setTimeout(saveState, 2000);
+}
+
+function loadState() {
+    let saved = null;
+
+    try {
+        saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    } catch (error) {
+        console.warn("Could not read saved state:", error);
+    }
+
+    if (!saved || typeof saved !== "object") return;
+
+    if (saved.settings) {
+        state.settings.work = clampMinutes(saved.settings.work, 1, 120, DEFAULT_SETTINGS.work);
+        state.settings.short = clampMinutes(saved.settings.short, 1, 60, DEFAULT_SETTINGS.short);
+        state.settings.long = clampMinutes(saved.settings.long, 1, 60, DEFAULT_SETTINGS.long);
+        state.settings.sound = saved.settings.sound !== false;
+    }
+
+    if (saved.stats) {
+        state.sessionsCompleted = positiveInt(saved.stats.sessionsCompleted);
+        state.totalFocusMs = positiveInt(saved.stats.totalFocusMs);
+        state.workSessionsInRow = positiveInt(saved.stats.workSessionsInRow);
+    }
+
+    if (saved.timer && MODES[saved.timer.mode]) {
+        state.mode = saved.timer.mode;
+        const total = modeDurationMs(state.mode);
+        const savedRemaining = positiveInt(saved.timer.remainingMs);
+
+        if (saved.timer.endsAt && Number(saved.timer.endsAt) > Date.now()) {
+            state.endsAt = Number(saved.timer.endsAt);
+            state.remainingMs = Math.min(total, state.endsAt - Date.now());
+            state.running = true;
+        } else {
+            state.remainingMs = Math.min(total, savedRemaining || total);
+            state.running = false;
+            state.endsAt = null;
+        }
+    }
+}
+
+function positiveInt(value) {
+    const parsed = Math.round(Number(value));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 function modeDurationMs(mode) {
     return state.settings[mode] * 60 * 1000;
 }
@@ -91,6 +171,8 @@ function render() {
     els.tabs.forEach(function (tab) {
         tab.classList.toggle("active", tab.dataset.mode === state.mode);
     });
+
+    queueSave();
 }
 
 function stopTicker() {
@@ -281,11 +363,22 @@ Object.keys(els.inputs).forEach(function (mode) {
     els.inputs[mode].addEventListener("change", applySettings);
 });
 
+els.soundToggle.addEventListener("change", function () {
+    state.settings.sound = els.soundToggle.checked;
+    queueSave();
+});
+
 document.addEventListener("visibilitychange", function () {
-    if (!document.hidden && state.running) {
+    if (document.hidden) {
+        saveState();
+        return;
+    }
+    if (state.running) {
         tick();
     }
 });
+
+window.addEventListener("beforeunload", saveState);
 
 document.addEventListener("keydown", function (event) {
     if (event.target instanceof HTMLInputElement) return;
@@ -299,5 +392,16 @@ document.addEventListener("keydown", function (event) {
         skipSession();
     }
 });
+
+loadState();
+
+els.inputs.work.value = String(state.settings.work);
+els.inputs.short.value = String(state.settings.short);
+els.inputs.long.value = String(state.settings.long);
+els.soundToggle.checked = state.settings.sound;
+
+if (state.running) {
+    startTicker();
+}
 
 render();

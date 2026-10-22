@@ -41,6 +41,24 @@
             Total focus time: <span id="total-focus">0m</span>
         </div>
 
+        <section class="tasks">
+            <div class="tasks-header">
+                <h2>Today's focus</h2>
+                <span class="tasks-progress" id="tasks-progress">0 of 0 done</span>
+            </div>
+            <form class="task-form" id="task-form">
+                <input
+                    type="text"
+                    id="task-input"
+                    placeholder="What are you working on?"
+                    maxlength="120"
+                    autocomplete="off"
+                >
+                <button type="submit" id="task-add">Add</button>
+            </form>
+            <ul class="task-list" id="task-list"></ul>
+        </section>
+
         <div class="settings">
             <h2>Settings</h2>
             <div class="setting-row">

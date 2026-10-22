@@ -26,6 +26,7 @@ const state = {
     sessionsCompleted: 0,
     totalFocusMs: 0,
     workSessionsInRow: 0,
+    tasks: [],
     lastTickAt: 0,
     ticker: null
 };
@@ -40,6 +41,10 @@ const els = {
     sessionCount: document.getElementById("session-count"),
     totalFocus: document.getElementById("total-focus"),
     soundToggle: document.getElementById("sound-toggle"),
+    taskForm: document.getElementById("task-form"),
+    taskInput: document.getElementById("task-input"),
+    taskList: document.getElementById("task-list"),
+    tasksProgress: document.getElementById("tasks-progress"),
     tabs: document.querySelectorAll(".mode-tab"),
     inputs: {
         work: document.getElementById("work-duration"),
@@ -65,6 +70,7 @@ function saveState() {
                 totalFocusMs: state.totalFocusMs,
                 workSessionsInRow: state.workSessionsInRow
             },
+            tasks: state.tasks,
             timer: {
                 mode: state.mode,
                 remainingMs: state.remainingMs,
@@ -104,6 +110,21 @@ function loadState() {
         state.sessionsCompleted = positiveInt(saved.stats.sessionsCompleted);
         state.totalFocusMs = positiveInt(saved.stats.totalFocusMs);
         state.workSessionsInRow = positiveInt(saved.stats.workSessionsInRow);
+    }
+
+    if (Array.isArray(saved.tasks)) {
+        state.tasks = saved.tasks
+            .filter(function (task) {
+                return task && typeof task.text === "string" && task.text.trim();
+            })
+            .slice(0, 50)
+            .map(function (task) {
+                return {
+                    id: typeof task.id === "string" && task.id ? task.id : makeId(),
+                    text: task.text.trim().slice(0, 120),
+                    done: task.done === true
+                };
+            });
     }
 
     if (saved.timer && MODES[saved.timer.mode]) {
@@ -146,6 +167,72 @@ function formatTotal(ms) {
     const minutes = Math.floor(ms / 60000);
     const hours = Math.floor(minutes / 60);
     return hours > 0 ? hours + "h " + (minutes % 60) + "m" : minutes + "m";
+}
+
+function makeId() {
+    return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function addTask(text) {
+    const trimmed = String(text || "").trim();
+    if (!trimmed) return;
+    state.tasks.push({ id: makeId(), text: trimmed.slice(0, 120), done: false });
+    renderTasks();
+}
+
+function toggleTask(id) {
+    const task = state.tasks.find(function (item) {
+        return item.id === id;
+    });
+    if (!task) return;
+    task.done = !task.done;
+    renderTasks();
+}
+
+function removeTask(id) {
+    state.tasks = state.tasks.filter(function (item) {
+        return item.id !== id;
+    });
+    renderTasks();
+}
+
+function renderTasks() {
+    els.taskList.textContent = "";
+
+    state.tasks.forEach(function (task) {
+        const item = document.createElement("li");
+        item.className = "task-item" + (task.done ? " done" : "");
+        item.dataset.id = task.id;
+
+        const check = document.createElement("input");
+        check.type = "checkbox";
+        check.className = "task-check";
+        check.checked = task.done;
+        check.setAttribute("aria-label", "Mark done: " + task.text);
+
+        const label = document.createElement("span");
+        label.className = "task-text";
+        label.textContent = task.text;
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "task-remove";
+        remove.textContent = "\u00d7";
+        remove.setAttribute("aria-label", "Remove task: " + task.text);
+
+        item.appendChild(check);
+        item.appendChild(label);
+        item.appendChild(remove);
+        els.taskList.appendChild(item);
+    });
+
+    const total = state.tasks.length;
+    const done = state.tasks.filter(function (task) {
+        return task.done;
+    }).length;
+
+    els.tasksProgress.textContent = total === 0 ? "0 of 0 done" : done + " of " + total + " done";
+    queueSave();
 }
 
 function render() {
@@ -368,6 +455,23 @@ els.soundToggle.addEventListener("change", function () {
     queueSave();
 });
 
+els.taskForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    addTask(els.taskInput.value);
+    els.taskInput.value = "";
+});
+
+els.taskList.addEventListener("click", function (event) {
+    const item = event.target.closest(".task-item");
+    if (!item) return;
+
+    if (event.target.classList.contains("task-check")) {
+        toggleTask(item.dataset.id);
+    } else if (event.target.classList.contains("task-remove")) {
+        removeTask(item.dataset.id);
+    }
+});
+
 document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
         saveState();
@@ -405,3 +509,4 @@ if (state.running) {
 }
 
 render();
+renderTasks();

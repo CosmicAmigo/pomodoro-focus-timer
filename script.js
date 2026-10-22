@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
     short: 5,
     long: 15,
     sound: true,
+    notify: false,
     sessionsBeforeLong: 4
 };
 
@@ -41,6 +42,7 @@ const els = {
     sessionCount: document.getElementById("session-count"),
     totalFocus: document.getElementById("total-focus"),
     soundToggle: document.getElementById("sound-toggle"),
+    notifyToggle: document.getElementById("notify-toggle"),
     themeToggle: document.getElementById("theme-toggle"),
     taskForm: document.getElementById("task-form"),
     taskInput: document.getElementById("task-input"),
@@ -143,6 +145,7 @@ function loadState() {
         state.settings.short = clampMinutes(saved.settings.short, 1, 60, DEFAULT_SETTINGS.short);
         state.settings.long = clampMinutes(saved.settings.long, 1, 60, DEFAULT_SETTINGS.long);
         state.settings.sound = saved.settings.sound !== false;
+        state.settings.notify = saved.settings.notify === true;
     }
 
     if (saved.stats) {
@@ -397,12 +400,15 @@ function completeSession() {
     state.endsAt = null;
     state.remainingMs = 0;
 
-    if (state.mode === "work") {
+    const wasWork = state.mode === "work";
+
+    if (wasWork) {
         state.sessionsCompleted += 1;
         state.workSessionsInRow += 1;
     }
 
     playChime();
+    notifySessionEnd(wasWork);
     render();
 
     const upcoming = nextMode();
@@ -451,6 +457,22 @@ function playChime() {
     }
 }
 
+function notifySessionEnd(wasWork) {
+    if (!state.settings.notify) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+
+    const title = wasWork ? "Focus session complete" : "Break is over";
+    const body = wasWork
+        ? "Nice work. Take a " + state.settings.short + " minute break."
+        : "Back to it: " + state.settings.work + " minutes of focus.";
+
+    try {
+        new Notification(title, { body: body, tag: "pomodoro-focus-timer", silent: true });
+    } catch (error) {
+        console.warn("Could not show notification:", error);
+    }
+}
+
 function applySettings() {
     const next = {
         work: clampMinutes(els.inputs.work.value, 1, 120, DEFAULT_SETTINGS.work),
@@ -492,6 +514,29 @@ Object.keys(els.inputs).forEach(function (mode) {
 els.soundToggle.addEventListener("change", function () {
     state.settings.sound = els.soundToggle.checked;
     queueSave();
+});
+
+els.notifyToggle.addEventListener("change", function () {
+    if (typeof Notification === "undefined") {
+        els.notifyToggle.checked = false;
+        return;
+    }
+
+    if (!els.notifyToggle.checked) {
+        state.settings.notify = false;
+        queueSave();
+        return;
+    }
+
+    Notification.requestPermission().then(function (permission) {
+        state.settings.notify = permission === "granted";
+        els.notifyToggle.checked = state.settings.notify;
+        queueSave();
+    }).catch(function () {
+        state.settings.notify = false;
+        els.notifyToggle.checked = false;
+        queueSave();
+    });
 });
 
 els.taskForm.addEventListener("submit", function (event) {
@@ -548,6 +593,9 @@ els.inputs.work.value = String(state.settings.work);
 els.inputs.short.value = String(state.settings.short);
 els.inputs.long.value = String(state.settings.long);
 els.soundToggle.checked = state.settings.sound;
+els.notifyToggle.checked = state.settings.notify
+    && typeof Notification !== "undefined"
+    && Notification.permission === "granted";
 
 if (state.running) {
     startTicker();

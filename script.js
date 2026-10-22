@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
     sound: true,
     notify: false,
     ambient: false,
+    autoStart: false,
     sessionsBeforeLong: 4
 };
 
@@ -30,6 +31,7 @@ const state = {
     workSessionsInRow: 0,
     tasks: [],
     history: [],
+    days: {},
     lastTickAt: 0,
     ticker: null
 };
@@ -46,6 +48,7 @@ const els = {
     soundToggle: document.getElementById("sound-toggle"),
     notifyToggle: document.getElementById("notify-toggle"),
     ambientToggle: document.getElementById("ambient-toggle"),
+    autostartToggle: document.getElementById("autostart-toggle"),
     themeToggle: document.getElementById("theme-toggle"),
     taskForm: document.getElementById("task-form"),
     taskInput: document.getElementById("task-input"),
@@ -53,6 +56,8 @@ const els = {
     tasksProgress: document.getElementById("tasks-progress"),
     historyList: document.getElementById("history-list"),
     historyClear: document.getElementById("history-clear"),
+    weekBars: document.getElementById("week-bars"),
+    weekTotal: document.getElementById("week-total"),
     tabs: document.querySelectorAll(".mode-tab"),
     inputs: {
         work: document.getElementById("work-duration"),
@@ -124,6 +129,7 @@ function saveState() {
             },
             tasks: state.tasks,
             history: state.history.slice(0, 20),
+            days: state.days,
             timer: {
                 mode: state.mode,
                 remainingMs: state.remainingMs,
@@ -159,6 +165,7 @@ function loadState() {
         state.settings.sound = saved.settings.sound !== false;
         state.settings.notify = saved.settings.notify === true;
         state.settings.ambient = saved.settings.ambient === true;
+        state.settings.autoStart = saved.settings.autoStart === true;
     }
 
     if (saved.stats) {
@@ -191,6 +198,16 @@ function loadState() {
             .map(function (entry) {
                 return { at: Number(entry.at), minutes: Math.round(Number(entry.minutes)) };
             });
+    }
+
+    if (saved.days && typeof saved.days === "object") {
+        Object.keys(saved.days).forEach(function (key) {
+            const minutes = Number(saved.days[key]);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isFinite(minutes) && minutes > 0) {
+                state.days[key] = Math.round(minutes);
+            }
+        });
+        pruneDays();
     }
 
     if (saved.timer && MODES[saved.timer.mode]) {
@@ -313,12 +330,80 @@ function formatWhen(timestamp) {
     return when.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + time;
 }
 
+function dayKey(timestamp) {
+    const date = new Date(timestamp);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return date.getFullYear() + "-" + month + "-" + day;
+}
+
+function pruneDays() {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - 29);
+    const minKey = dayKey(cutoff.getTime());
+
+    Object.keys(state.days).forEach(function (key) {
+        if (key < minKey) delete state.days[key];
+    });
+}
+
 function recordSession(focusedMinutes) {
     if (state.mode !== "work") return;
     const minutes = Math.round(Number(focusedMinutes) || 0);
     if (minutes < 1) return;
     state.history.unshift({ at: Date.now(), minutes: minutes });
     state.history = state.history.slice(0, 20);
+    const key = dayKey(Date.now());
+    state.days[key] = (Number(state.days[key]) || 0) + minutes;
+    pruneDays();
+}
+
+function renderDays() {
+    els.weekBars.textContent = "";
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const days = [];
+    for (let offset = 6; offset >= 0; offset -= 1) {
+        const date = new Date(today.getTime());
+        date.setDate(today.getDate() - offset);
+        const key = dayKey(date.getTime());
+        days.push({
+            date: date,
+            minutes: Math.max(0, Math.round(Number(state.days[key]) || 0)),
+            isToday: offset === 0
+        });
+    }
+
+    const max = Math.max(25, days.reduce(function (top, day) {
+        return Math.max(top, day.minutes);
+    }, 0));
+    let total = 0;
+
+    days.forEach(function (day) {
+        total += day.minutes;
+
+        const col = document.createElement("div");
+        col.className = "week-col";
+        col.title = day.date.toLocaleDateString([], { weekday: "long" }) + ": " + day.minutes + " min";
+
+        const bar = document.createElement("div");
+        bar.className = "week-bar" + (day.isToday ? " today" : "");
+        bar.style.height = Math.max(4, Math.round((day.minutes / max) * 100)) + "%";
+
+        const label = document.createElement("span");
+        label.className = "week-label";
+        label.textContent = day.date.toLocaleDateString([], { weekday: "narrow" });
+
+        col.appendChild(bar);
+        col.appendChild(label);
+        els.weekBars.appendChild(col);
+    });
+
+    const hours = Math.floor(total / 60);
+    els.weekTotal.textContent = hours + "h " + (total % 60) + "m";
 }
 
 function renderHistory() {
@@ -329,6 +414,7 @@ function renderHistory() {
         empty.className = "history-empty";
         empty.textContent = "Finished focus sessions will show up here.";
         els.historyList.appendChild(empty);
+        renderDays();
         return;
     }
 
@@ -347,6 +433,8 @@ function renderHistory() {
         row.appendChild(when);
         els.historyList.appendChild(row);
     });
+
+    renderDays();
 }
 
 function render() {
@@ -488,10 +576,14 @@ function completeSession(focusedMinutes) {
     playChime();
     notifySessionEnd(wasWork);
     render();
+    renderHistory();
 
     const upcoming = nextMode();
     window.setTimeout(function () {
         setMode(upcoming);
+        if (state.settings.autoStart) {
+            startTimer();
+        }
     }, 800);
 }
 
@@ -690,6 +782,11 @@ els.ambientToggle.addEventListener("change", function () {
     queueSave();
 });
 
+els.autostartToggle.addEventListener("change", function () {
+    state.settings.autoStart = els.autostartToggle.checked;
+    queueSave();
+});
+
 els.taskForm.addEventListener("submit", function (event) {
     event.preventDefault();
     addTask(els.taskInput.value);
@@ -748,6 +845,7 @@ els.inputs.short.value = String(state.settings.short);
 els.inputs.long.value = String(state.settings.long);
 els.soundToggle.checked = state.settings.sound;
 els.ambientToggle.checked = state.settings.ambient;
+els.autostartToggle.checked = state.settings.autoStart;
 els.notifyToggle.checked = state.settings.notify
     && typeof Notification !== "undefined"
     && Notification.permission === "granted";

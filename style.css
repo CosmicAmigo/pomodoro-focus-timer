@@ -446,6 +446,50 @@ body.mode-long .timer-progress {
     font-size: 0.9rem;
 }
 
+.week {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+
+.week-bars {
+    display: flex;
+    gap: 0.45rem;
+    height: 120px;
+}
+
+.week-col {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: 0.4rem;
+    align-items: end;
+    justify-items: center;
+}
+
+.week-bar {
+    align-self: end;
+    width: 100%;
+    max-width: 34px;
+    min-height: 3px;
+    border-radius: 6px 6px 2px 2px;
+    background: var(--work-color);
+    opacity: 0.5;
+    transition: height 0.3s ease;
+}
+
+.week-bar.today {
+    opacity: 1;
+}
+
+.week-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
 @media (max-width: 400px) {
     .timer-circle {
         width: 220px;
